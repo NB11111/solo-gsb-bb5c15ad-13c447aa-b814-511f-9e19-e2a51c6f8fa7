@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Waveform, type Region, type SeamMarker } from './components/Waveform';
+import { SeamSpectrumPanel } from './components/SeamSpectrumPanel';
 import { LoopPlayer } from './audio/player';
 import { decodeAudioFile } from './audio/decode';
 import { findCandidateSeams, type SeamResult } from './audio/loopFinder';
 import { buildLoopPcm } from './audio/loopBuffer';
+import { analyzeSeamSpectrum } from './audio/seamSpectrum';
 import { encodeWav, wavFileSize } from './audio/wavExport';
 import { fmtBytes, fmtTime } from './utils/format';
 
@@ -12,6 +14,13 @@ const SLOPE_WEIGHT = 1;
 const MIN_LOOP_SECONDS = 0.05;
 /** 候选接缝数量（按代价升序） */
 const MAX_CANDIDATES = 5;
+
+/** 保留 decimals 位小数的有限数值（防御 NaN / Infinity 进入 JSON） */
+const roundTo = (x: number, decimals: number): number => {
+  if (!Number.isFinite(x)) return 0;
+  const p = 10 ** decimals;
+  return Math.round(x * p) / p;
+};
 
 type PlayTarget = 'original' | 'optimized';
 
@@ -23,6 +32,7 @@ export default function App() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [radiusMs, setRadiusMs] = useState(50);
   const [crossfadeMs, setCrossfadeMs] = useState(20);
+  const [specWindowMs, setSpecWindowMs] = useState(200);
   const [playing, setPlaying] = useState<PlayTarget | null>(null);
   const [status, setStatus] = useState('请导入 WAV / MP3 音频文件（音频仅在本地浏览器处理，不会上传）。');
   const [busy, setBusy] = useState(false);
@@ -32,6 +42,18 @@ export default function App() {
 
   // 当前选中的候选接缝：「试听选中候选」与 JSON / WAV 导出的目标
   const seam = candidates[selectedIdx] ?? null;
+
+  // 接缝频谱检查：当前候选的循环 PCM（与试听 / 导出口径一致，含交叉淡化），
+  // 切换候选或调整交叉淡化时自动重建，频谱分析随之实时重算
+  const loopPcm = useMemo(() => {
+    if (!buffer || !seam) return null;
+    return buildLoopPcm(buffer, seam.startSample, seam.endSample, (crossfadeMs / 1000) * buffer.sampleRate);
+  }, [buffer, seam, crossfadeMs]);
+
+  const spectrum = useMemo(() => {
+    if (!loopPcm) return null;
+    return analyzeSeamSpectrum(loopPcm, (specWindowMs / 1000) * loopPcm.sampleRate);
+  }, [loopPcm, specWindowMs]);
 
   const getPlayer = (): LoopPlayer => {
     if (!playerRef.current) playerRef.current = new LoopPlayer();
@@ -236,6 +258,37 @@ export default function App() {
         slopeWeight: SLOPE_WEIGHT,
       },
       seamCost: seam.cost,
+      // 接缝频谱诊断：参数与结果（差值矩阵为 头 − 尾，帧按与接缝的距离配对）
+      spectrumDiagnostics: spectrum
+        ? {
+            candidate: selectedIdx + 1,
+            parameters: {
+              windowMsRequested: specWindowMs,
+              windowMsEffective: roundTo((spectrum.windowSamples / spectrum.sampleRate) * 1000, 3),
+              windowClamped: spectrum.clamped,
+              windowFunction: 'hann',
+              fftSize: spectrum.fftSize,
+              hopSamples: spectrum.hopSamples,
+              overlapRatio: 0.75,
+              bandCount: spectrum.bands,
+              bandEdgesHz: spectrum.bandEdgesHz.map((f) => roundTo(f, 1)),
+              frameCount: spectrum.frameOffsetsSec.length,
+              alignment: 'seam-distance',
+              diff: 'headDb-tailDb',
+            },
+            results: {
+              maxAbsDiffDb: roundTo(spectrum.maxAbsDiffDb, 2),
+              worstBand: spectrum.worstBand + 1,
+              worstBandHz: [
+                roundTo(spectrum.bandEdgesHz[spectrum.worstBand], 1),
+                roundTo(spectrum.bandEdgesHz[spectrum.worstBand + 1], 1),
+              ],
+              bandMaxAbsDb: spectrum.bandMaxAbsDb.map((v) => roundTo(v, 2)),
+              frameOffsetsMs: spectrum.frameOffsetsSec.map((t) => roundTo(t * 1000, 1)),
+              diffDb: spectrum.diffDb.map((row) => row.map((v) => roundTo(v, 2))),
+            },
+          }
+        : null,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -245,8 +298,8 @@ export default function App() {
     a.download = `${fileName.replace(/\.[^.]+$/, '') || 'loop'}.loop.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setStatus(`已导出 JSON：候选 #${selectedIdx + 1} 的起止时间、全部候选列表与搜索参数。`);
-  }, [buffer, selection, seam, candidates, selectedIdx, fileName, radiusMs, crossfadeMs]);
+    setStatus(`已导出 JSON：候选 #${selectedIdx + 1} 的起止时间、全部候选列表、搜索参数与接缝频谱诊断。`);
+  }, [buffer, selection, seam, candidates, selectedIdx, fileName, radiusMs, crossfadeMs, spectrum, specWindowMs]);
 
   const exportWav = useCallback(() => {
     if (!buffer || !seam) return;
@@ -290,7 +343,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>无缝循环接缝查找器</h1>
-        <p>本地浏览器内分析音频，在粗选边界附近搜索幅值与短窗斜率最连续的接缝候选（Top 5 按代价排序），可点选对比试听并导出参数。</p>
+        <p>本地浏览器内分析音频，在粗选边界附近搜索幅值与短窗斜率最连续的接缝候选（Top 5 按代价排序），可点选对比试听、查看接缝频谱诊断热图并导出参数。</p>
       </header>
 
       <section
@@ -414,6 +467,15 @@ export default function App() {
                 </tbody>
               </table>
             </section>
+          )}
+
+          {seam && buffer && (
+            <SeamSpectrumPanel
+              result={spectrum}
+              candidateLabel={`候选 #${selectedIdx + 1}`}
+              windowMs={specWindowMs}
+              onWindowMsChange={setSpecWindowMs}
+            />
           )}
 
           <section className="panel info">

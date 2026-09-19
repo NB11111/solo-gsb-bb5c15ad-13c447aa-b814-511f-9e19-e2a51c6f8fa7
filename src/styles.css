@@ -262,6 +262,74 @@ button.active {
   color: #9aa7bd;
 }
 
+/* 接缝频谱检查面板 */
+.spectrum h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.spectrum-desc {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #9aa7bd;
+}
+
+.spectrum-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+  font-size: 13px;
+  color: #9aa7bd;
+  margin-bottom: 12px;
+}
+
+.spectrum-slider b {
+  color: #e6ebf5;
+}
+
+.spectrum-slider .stale {
+  color: #ffb020;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.clamp-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #ffb020;
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.heatmap {
+  border: 1px solid #232c40;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0e1320;
+}
+
+.heatmap-readout {
+  margin: 8px 2px 0;
+  min-height: 18px;
+  font-size: 12px;
+  color: #9aa7bd;
+  font-variant-numeric: tabular-nums;
+}
+
+.spectrum-summary {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #9aa7bd;
+}
+
+.spectrum-summary b {
+  color: #7fe6b0;
+}
+
 .cost {
   margin: 10px 0 0;
   font-size: 12px;
