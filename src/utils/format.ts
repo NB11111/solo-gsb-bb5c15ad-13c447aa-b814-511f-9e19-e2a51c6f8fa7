@@ -20,3 +20,15 @@ export function fmtTick(sec: number): string {
   const s = Math.floor(sec - m * 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 }
+
+/** Hz → 可读频率（如 120 → "120 Hz"，4800 → "4.80 kHz"） */
+export function fmtHz(hz: number): string {
+  if (!Number.isFinite(hz)) return '—';
+  if (hz >= 1000) return `${(hz / 1000).toFixed(hz >= 10000 ? 1 : 2)} kHz`;
+  return `${Math.round(hz)} Hz`;
+}
+
+/** ms → 可读时长（保留 0–1 位小数） */
+export function fmtMs(ms: number): string {
+  return `${Math.round(ms)} ms`;
+}

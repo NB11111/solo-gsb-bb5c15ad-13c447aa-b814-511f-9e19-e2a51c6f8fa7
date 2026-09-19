@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Waveform, type Region, type SeamMarker } from './components/Waveform';
+import { SeamSpectrumPanel } from './components/SeamSpectrumPanel';
 import { LoopPlayer } from './audio/player';
 import { decodeAudioFile } from './audio/decode';
 import { findCandidateSeams, type SeamResult } from './audio/loopFinder';
 import { buildLoopPcm } from './audio/loopBuffer';
+import { analyzeSeamSpectrum, type SeamSpectrumResult } from './audio/seamSpectrum';
 import { encodeWav, wavFileSize } from './audio/wavExport';
 import { fmtBytes, fmtTime } from './utils/format';
 
@@ -23,6 +25,7 @@ export default function App() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [radiusMs, setRadiusMs] = useState(50);
   const [crossfadeMs, setCrossfadeMs] = useState(20);
+  const [spectrumWindowMs, setSpectrumWindowMs] = useState(100);
   const [playing, setPlaying] = useState<PlayTarget | null>(null);
   const [status, setStatus] = useState('请导入 WAV / MP3 音频文件（音频仅在本地浏览器处理，不会上传）。');
   const [busy, setBusy] = useState(false);
@@ -32,6 +35,19 @@ export default function App() {
 
   // 当前选中的候选接缝：「试听选中候选」与 JSON / WAV 导出的目标
   const seam = candidates[selectedIdx] ?? null;
+
+  // 接缝频谱检查：候选切换、交叉淡化或检查窗变化时实时重算。
+  // 分析直接走 buildLoopPcm（含等功率交叉淡化），与播放 / WAV 导出的缓冲完全一致。
+  const spectrum: SeamSpectrumResult | null = useMemo(() => {
+    if (!buffer || !seam) return null;
+    return analyzeSeamSpectrum(
+      buffer,
+      seam.startSample,
+      seam.endSample,
+      (crossfadeMs / 1000) * buffer.sampleRate,
+      spectrumWindowMs,
+    );
+  }, [buffer, seam, crossfadeMs, spectrumWindowMs]);
 
   const getPlayer = (): LoopPlayer => {
     if (!playerRef.current) playerRef.current = new LoopPlayer();
@@ -236,6 +252,40 @@ export default function App() {
         slopeWeight: SLOPE_WEIGHT,
       },
       seamCost: seam.cost,
+      spectrumDiagnostics: spectrum
+        ? {
+            parameters: {
+              windowMs: Math.round(spectrum.windowMs * 10) / 10,
+              requestedWindowMs: spectrum.requestedWindowMs,
+              clamped: spectrum.clamped,
+              fftSize: spectrum.fftSize,
+              hopSamples: spectrum.hopSamples,
+              overlap: 0.5,
+              window: 'hann',
+              bandCount: spectrum.bands.length,
+              noiseFloorDb: -120,
+            },
+            bands: spectrum.bands.map((b, i) => ({
+              band: i + 1,
+              lowHz: Math.round(b.lowHz * 10) / 10,
+              highHz: Math.round(b.highHz * 10) / 10,
+              maxDiffDb: Math.round(spectrum.bandMaxDiffDb[i] * 100) / 100,
+              meanDiffDb: Math.round(spectrum.bandMeanDiffDb[i] * 100) / 100,
+            })),
+            result: {
+              maxDiffDb: Math.round(spectrum.maxDiffDb * 100) / 100,
+              maxDiffFrame: spectrum.maxDiffFrame + 1,
+              frameCount: spectrum.frameCount,
+              maxDiffBand: spectrum.maxDiffBand + 1,
+              worstBand: spectrum.worstBand + 1,
+              worstBandMeanDiffDb: Math.round(spectrum.worstBandMeanDiffDb * 100) / 100,
+            },
+            // [帧][频带] 的头尾能量差矩阵（dB），与热图一一对应
+            diffMatrixDb: spectrum.diffDb.map((row) =>
+              row.map((d) => Math.round(d * 100) / 100),
+            ),
+          }
+        : null,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -245,8 +295,8 @@ export default function App() {
     a.download = `${fileName.replace(/\.[^.]+$/, '') || 'loop'}.loop.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setStatus(`已导出 JSON：候选 #${selectedIdx + 1} 的起止时间、全部候选列表与搜索参数。`);
-  }, [buffer, selection, seam, candidates, selectedIdx, fileName, radiusMs, crossfadeMs]);
+    setStatus(`已导出 JSON：候选 #${selectedIdx + 1} 的起止时间、全部候选列表、搜索参数与频谱诊断。`);
+  }, [buffer, selection, seam, candidates, selectedIdx, fileName, radiusMs, crossfadeMs, spectrum]);
 
   const exportWav = useCallback(() => {
     if (!buffer || !seam) return;
@@ -285,6 +335,16 @@ export default function App() {
     wavFrames = e - s;
     wavBytes = wavFileSize(wavFrames, buffer.numberOfChannels);
   }
+
+  // 频谱面板片段定位（与 buildLoopPcm 的夹取规则一致）：
+  // 头部片段 = 循环缓冲 [0, W)，对应源文件 startSample + 实际生效淡化长度；
+  // 尾部片段主体 = 源文件 endSample − W 起（末尾淡化段为头/尾等功率混合）。
+  const crossfadeAppliedSamples =
+    seam && spectrum
+      ? Math.max(0, Math.min(Math.round((crossfadeMs / 1000) * sr), Math.floor(spectrum.loopSamples / 2)))
+      : 0;
+  const headSegStartSec = seam && spectrum ? (seam.startSample + crossfadeAppliedSamples) / sr : 0;
+  const tailSegStartSec = seam && spectrum ? (seam.endSample - spectrum.windowSamples) / sr : 0;
 
   return (
     <div className="app">
@@ -414,6 +474,18 @@ export default function App() {
                 </tbody>
               </table>
             </section>
+          )}
+
+          {spectrum && seam && (
+            <SeamSpectrumPanel
+              spectrum={spectrum}
+              windowMs={spectrumWindowMs}
+              setWindowMs={setSpectrumWindowMs}
+              candidateRank={selectedIdx + 1}
+              // 循环缓冲头部 N 帧之后对应源文件位置；尾部片段起点 = 终点 − 窗长
+              headStartSec={headSegStartSec}
+              tailStartSec={tailSegStartSec}
+            />
           )}
 
           <section className="panel info">

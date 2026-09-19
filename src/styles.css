@@ -295,3 +295,209 @@ button.active {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- 接缝频谱检查面板 ---- */
+.spectrum-panel h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.spectrum-desc {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: #9aa7bd;
+}
+
+.spectrum-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.spectrum-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #9aa7bd;
+}
+
+.spectrum-slider b {
+  color: #e6ebf5;
+}
+
+.spectrum-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid #2c3852;
+  background: #1b2338;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #9aa7bd;
+}
+
+.chip b {
+  color: #ffd28a;
+  font-size: 14px;
+}
+
+.chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: #7e8aa3;
+}
+
+.chip-worst b {
+  color: #ff8ea8;
+}
+
+.spectrum-warning {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #ffb020;
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.spectrum-meta {
+  margin: 6px 0 10px;
+  font-size: 11px;
+  color: #5c6a85;
+}
+
+.heatmap-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.band-labels {
+  width: 92px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.band-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-size: 10px;
+  color: #7e8aa3;
+  border-bottom: 1px solid rgba(8, 12, 22, 0.85);
+  white-space: nowrap;
+}
+
+.band-label.worst {
+  color: #ff8ea8;
+  font-weight: 600;
+}
+
+.heatmap-area {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+}
+
+.heatmap-canvas {
+  display: block;
+  border: 1px solid #232c40;
+  border-radius: 4px;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.heatmap-tip {
+  position: absolute;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: rgba(10, 14, 24, 0.94);
+  border: 1px solid #3a4a6e;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: #c7d1e4;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.heatmap-tip b {
+  color: #e6ebf5;
+}
+
+.heatmap-tip .tip-band {
+  color: #9fc0ff;
+}
+
+.heatmap-tip .tip-diff {
+  color: #ffd28a;
+  font-weight: 600;
+}
+
+.colorbar-col {
+  flex: none;
+}
+
+.colorbar {
+  border: 1px solid #232c40;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.colorbar-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #7e8aa3;
+  width: 22px;
+  flex: none;
+  line-height: 1;
+  padding: 1px 0;
+}
+
+.heatmap-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.heatmap-toolbar button {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.heatmap-hint {
+  font-size: 11px;
+  color: #5c6a85;
+}
+
+.spectrum-segments {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #5c6a85;
+}
+
+@media (max-width: 640px) {
+  .spectrum-controls {
+    grid-template-columns: 1fr;
+  }
+}
